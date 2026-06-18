@@ -1,0 +1,12 @@
+pandas>=2.0,<3
+numpy>=1.24,<2
+scipy>=1.11,<2
+matplotlib>=3.7
+seaborn>=0.13
+statsmodels>=0.14
+pmdarima>=2.0
+holidays>=0.40
+meteostat>=1.6
+pyarrow>=14.0
+jupyter>=1.0
+ipykernel>=6.0

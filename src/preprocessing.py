@@ -1,5 +1,6 @@
+import os
+
 import pandas as pd
-from statsmodels.tsa.seasonal import MSTL
 import numpy as np
 import holidays
 from meteostat import Point, Hourly
@@ -39,7 +40,7 @@ def model_features(df):
     FEATURES_SARIMAX = ["is_weekend", "is_holiday", "mean_cdh", "mean_hdh"]
 
     # Dynamic Harmonic Regression (Fourier terms + weather averages)
-    FOURIER_COLS = [c for c in df.columns if c.startswith(("sin_", "cos_"))]
+    FOURIER_COLS = sorted(c for c in df.columns if c.startswith(("sin_", "cos_")))
     FEATURES_DHR = FOURIER_COLS + [
         "is_weekend",
         "is_holiday",
@@ -95,12 +96,36 @@ def calculate_lags(df, lags):
     return df
 
 
-def calculate_fourier_terms(df, periods, ks):
+def calculate_fourier_terms(df, periods, n_harmonics):
     t = np.arange(len(df))
-    for p, k in zip(periods, ks):
-        df[f"sin_{p}_k{k}"] = np.sin(2 * np.pi * k * t / p)
-        df[f"cos_{p}_k{k}"] = np.cos(2 * np.pi * k * t / p)
+    for period, n in zip(periods, n_harmonics):
+        for k in range(1, n + 1):
+            df[f"sin_{period}_k{k}"] = np.sin(2 * np.pi * k * t / period)
+            df[f"cos_{period}_k{k}"] = np.cos(2 * np.pi * k * t / period)
     return df
+
+
+def save_processed_splits(train, val, test, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    for name, split in [("train", train), ("val", val), ("test", test)]:
+        out = split.copy()
+        out.index.name = "Datetime"
+        out.reset_index().to_csv(os.path.join(output_dir, f"{name}.csv"), index=False)
+
+
+def load_processed_splits(data_dir):
+    def _read_split(filename):
+        path = os.path.join(data_dir, filename)
+        if "Datetime" in pd.read_csv(path, nrows=0).columns:
+            return pd.read_csv(path, parse_dates=["Datetime"], index_col="Datetime")
+        return pd.read_csv(path, parse_dates=["index"], index_col="index").rename_axis(
+            "Datetime"
+        )
+
+    train = _read_split("train.csv")
+    val = _read_split("val.csv")
+    test = _read_split("test.csv")
+    return train, val, test
 
 
 def encode_cyclical(df):
@@ -165,8 +190,3 @@ def reindex_time_series(df):
 def impute_time_series(df):
     df["energy"] = df["energy"].interpolate(method="linear")
     return df
-
-
-def fit_mstl(series, periods):
-    model = MSTL(series, periods=periods)
-    return model.fit()
