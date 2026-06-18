@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from scipy.signal import find_peaks, periodogram
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
@@ -160,8 +161,7 @@ def compute_periodogram(series, prominence_frac=0.25):
 
 
 def plot_mstl_decomposition(decomp, periods, title=None):
-    fig = decomp.plot()
-    fig.set_size_inches(14, 10)
+    ax = decomp.plot(figsize=(14, 10))
     plt.suptitle(
         title or f"MSTL Decomposition – periods {list(periods)}",
         fontsize=14,
@@ -170,9 +170,18 @@ def plot_mstl_decomposition(decomp, periods, title=None):
     plt.show()
 
 
+def _extract_mstl_components(decomp):
+    if isinstance(decomp, pd.DataFrame):
+        reserved = {"observed", "trend", "resid"}
+        seasonal_cols = [c for c in decomp.columns if c not in reserved]
+        if not seasonal_cols:
+            raise ValueError("No seasonal columns found in decomposition DataFrame.")
+        return decomp[seasonal_cols], decomp["resid"]
+    return decomp.seasonal, decomp.resid
+
+
 def compute_seasonal_strength(decomp):
-    seasonal_components = decomp.seasonal
-    residuals = decomp.resid
+    seasonal_components, residuals = _extract_mstl_components(decomp)
     var_residuals = np.var(residuals, ddof=1)
     strengths = {}
     for season in seasonal_components:
@@ -184,9 +193,10 @@ def compute_seasonal_strength(decomp):
 
 
 def plot_seasonal_correlation(decomp, title="Correlation Between Seasonal Components"):
+    seasonal_components, _ = _extract_mstl_components(decomp)
     plt.figure(figsize=(8, 6))
     sns.heatmap(
-        decomp.seasonal.corr(),
+        seasonal_components.corr(),
         cmap="mako",
         annot=True,
         fmt=".2f",
